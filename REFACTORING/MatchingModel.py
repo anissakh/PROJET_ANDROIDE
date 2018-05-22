@@ -1,8 +1,4 @@
 import csv
-
-from gurobipy import *
-
-
 class MatchingModel:
 
     def __init__(self, optimizer, equilibre=True):
@@ -71,6 +67,7 @@ class MatchingModel:
             self.objectif1_Value = 0
             self.objectif1_Value = 0
             self.infeasible = True
+            return -1
         else:
             self.modelGurobi.setParam(GRB.Param.ObjNumber, 0)
             self.objectif1_Value = self.modelGurobi.ObjNVal           #Nombre d'inscriptions satisfaites

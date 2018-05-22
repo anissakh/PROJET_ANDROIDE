@@ -1,9 +1,6 @@
-from gurobipy import *
-
-
 class UE:
         """Classe definissant une UE"""
-        colors = [1,2,5,6,112,164,7,9,14,37,70,63,96,166,124,100,209,12,190,155,81,64,127]
+        colors = [88,2,5,6,112,164,7,9,53,37,70,63,96,166,124,100,209,12,190,155,81,64,127]
         def __init__(self,csv_line,optimizer):
             self.optimizer_Params = optimizer.Parameters
             self.optimizer = optimizer
@@ -25,6 +22,15 @@ class UE:
             self.groupes_supprimes = set()
 
 
+
+        def get_code_couleur(self):
+            return u"\033[38;5;"+self.color+"m"
+
+        def intituleCOLOR(self,up=True):
+            intitule = self.intitule
+            if up:
+                intitule = intitule.upper()
+            return "\033[38;5;"+self.color+"m"+intitule+"\033[37;1m"
 
         def actualiseEDT(self, EDT):
             """MAJ de l'EDT"""
@@ -77,11 +83,7 @@ class UE:
             modelGurobi.update()
 
 
-        # def affecterEtuGroup(self, parcours, idRelatif, idGroup):
-        #     # try:
-        #     self.ResumeDesAffectations[idGroup].add((parcours, idRelatif))
-            # except:
-            #     print "Affectation de l'etudiant {}({}) imopssible. Groupe {} de l'UE {} est inconnu ".format(idRelatif,parcours,idGroup,self.intitule)
+
 
         def ajouterUnInscrit(self):
             self.nbInscrits += 1
@@ -110,22 +112,15 @@ class UE:
             s += self.intitule + "(" + str(len(self.EnsEtuInteresses) - self.nbInscrits) + " / " + str(self.capaciteTotale - self.nbInscrits) + ")  "
             return s
 
+        def deplacer_groupe(self, numeroGroupe, new_creneautd, new_creneautme):
+            self.ListeCreneauxTdTme[numeroGroupe] = (new_creneautd, new_creneautme)
+
 
         #--------------------------------------------------------------#
         def ajouter_un_groupe(self, creneauTd, creneauTme, capacite):
+            if self.nb_groupes + 1 > self.optimizer.Parameters.nbMaxGroupeParUE:
+                return self.nb_groupes
             if creneauTme != creneauTd: #Les exceptions
-                numero_nouveau_groupe = 0
-                if len(self.groupes_supprimes) != 0:
-                    L = list(self.groupes_supprimes)
-                    L.sort()
-                    numero_nouveau_groupe = L[0]
-                if numero_nouveau_groupe != 0:
-                    self.ListeCreneauxTdTme[numero_nouveau_groupe-1] = (creneauTd, creneauTme)
-                    self.ListeCapacites[numero_nouveau_groupe-1] = capacite
-                    self.groupes_supprimes.remove(numero_nouveau_groupe)
-                    self.maj_capacite_totale()
-                    self.optimizer.capaciteTotaleAccueil += capacite
-                    return numero_nouveau_groupe
 
                 self.ListeCreneauxTdTme.append((creneauTd, creneauTme))
                 self.ListeCapacites.append(capacite)
@@ -168,16 +163,18 @@ class UE:
                                 break
 
         def modifier_capacite_groupe(self, numeroGroupe, nouvelleCapacite):
-            # try:
-            # if numeroGroupe <= self.nb_groupes: #A REMPLACER PAR DES EXCEPTIONS
             self.optimizer.capaciteTotaleAccueil -= self.ListeCapacites[numeroGroupe - 1]
             self.optimizer.capaciteTotaleAccueil += nouvelleCapacite
             self.ListeCapacites[numeroGroupe - 1] = nouvelleCapacite
             self.maj_capacite_totale()
-            if nouvelleCapacite == 0:
-                self.groupes_supprimes.add(numeroGroupe)
-            # except:
-            #     print "Groupe {} de l'UE {} est inexistant dans la base.".format(numeroGroupe,self.intitule)
+            # if nouvelleCapacite == 0:
+            #     self.groupes_supprimes.add(numeroGroupe)
+
+        def supprimer_groupe(self, numero_groupe):
+            self.ListeCreneauxTdTme.pop(numero_groupe)
+            self.ListeCapacites.pop(numero_groupe-1)
+            self.nb_groupes -= 1
+            self.maj_capacite_totale()
 
         def modifier_creneau_cours(self, ancien_creneau, nouveau_creneau):
             pos_ancien_creneau = self.ListeCreneauxCours.index(ancien_creneau) #0 ou 1
@@ -241,14 +238,27 @@ class UE:
 
         def print_groupe(self):
             s = ""
-            for i in range(1,len(self.ListeCreneauxCours)+1):
-              s += "\t  COURS {}    :   {}  \n".format(i,self.ListeCreneauxCours[i-1])
-            # s += "UE {} :\n\tNombre de groupes : {}\n\tCapacite totale d'accueil: {}\n".format(self.intitule, self.nb_groupes - len(self.groupes_supprimes), self.capaciteTotale)
-            s += "\n\n|\t Num groupe \t|\t Capacite \t|\t Creneau TD \t|\t Creneau TME \t|\n"+\
-                 "-------------------------------------------------------------------\n"
+            s += "\t   Les Creneaux [Capacites]\n\n\t"
+            for cours in self.ListeCreneauxCours:
+                s += self.get_code_couleur()
+                s += "\t{:6s}: {:4s}\n\t".format("Cours",str(cours))
+                s += u"\033[37;1m"
 
-            for i in range(1,self.nb_groupes+1):
-                if i not in self.groupes_supprimes:
-                    s += "\t     {}     \t|\t     {}    \t|\t     {}     \t|\t     {}      \t|\n".format(i,self.ListeCapacites[i-1],self.ListeCreneauxTdTme[i][0],self.ListeCreneauxTdTme[i][1])+\
-                         "-------------------------------------------------------------------\n"
+            s += "\t"
+            s += "-"*14
+            s += "\n\t"
+            #LES CRENEAUX
+            for i in range(1, len(self.ListeCreneauxTdTme)):                                     #LES CRENEAUX
+                td, tme = self.ListeCreneauxTdTme[i]
+                #LES CRENEAUX
+                s += self.get_code_couleur()
+                s += "\t{:3s} {:2s}:{:4s}\n\t".format("Gr.", str(i), " [ "+str(self.ListeCapacites[i-1])+" ]")
+
+                s += u"\033[37;1m"
+
+                s += "\t{:5s} : {:4s}\n\t".format("TD", str(td))
+                s += "\t{:5s} : {:4s}\n\t".format("TME", str(tme))
+                s += "\t"
+                s += "-"*14
+                s += "\n\t"
             return s
